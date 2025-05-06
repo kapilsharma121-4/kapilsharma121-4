@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My Stranger</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.22.9/babel.min.js"></script>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-indigo-600 to-purple-600 transition-colors duration-500 dark:from-gray-900 dark:to-gray-700 flex items-center justify-center p-4">
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    // WelcomePage Component
+    const WelcomePage = ({ onConfirm }) => (
+      <div className="w-full max-w-md mx-4 bg-white/90 dark:bg-gray-800/90 backdrop-blur-md p-6 rounded-2xl shadow-xl border border-indigo-300/50 animate-fade-in">
+        <h1 className="text-3xl font-bold text-indigo-600 dark:text-indigo-300 mb-4 text-center">My Stranger</h1>
+        <p className="text-xl font-semibold text-gray-800 dark:text-gray-200 mb-4 text-center">
+          18+ Only: This app is for adults. Confirm you're 18 or older to enter.
+        </p>
+        <button
+          onClick={onConfirm}
+          className="w-full bg-indigo-500 text-white px-6 py-3 rounded-xl hover:bg-indigo-600 transform hover:scale-105 transition-all duration-200 shadow-lg"
+          aria-label="Confirm age 18 or older"
+        >
+          Enter (18+)
+        </button>
+      </div>
+    );
+
+    // VideoChat Component
+    const VideoChat = ({ localStream, remoteStream, onStart, onEnd, onToggleAudio, onToggleVideo, audioEnabled, videoEnabled, status, connecting }) => (
+      <div className="w-full md:w-2/3 space-y-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="relative">
+            <p className="text-sm font-semibold mb-2 text-white">Your Camera</p>
+            <video
+              ref={video => video && (video.srcObject = localStream)}
+              className="w-full h-64 md:h-80 lg:h-96 rounded-2xl border-2 border-indigo-300/50 shadow-lg hover:border-indigo-500 transition-all duration-300 object-cover aspect-video"
+              autoPlay
+              muted
+              aria-label="Your video feed"
+            />
+            <span className="absolute top-2 left-2 bg-indigo-600 text-white text-xs px-3 py-1 rounded-full">You</span>
+          </div>
+          <div className="relative">
+            <p className="text-sm font-semibold mb-2 text-white">Stranger's Camera</p>
+            <video
+              ref={video => video && (video.srcObject = remoteStream)}
+              className="w-full h-64 md:h-80 lg:h-96 rounded-2xl border-2 border-indigo-300/50 shadow-lg hover:border-indigo-500 transition-all duration-300 object-cover aspect-video"
+              autoPlay
+              aria-label="Stranger's video feed"
+            />
+            <span className="absolute top-2 left-2 bg-indigo-600 text-white text-xs px-3 py-1 rounded-full">Stranger</span>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-4">
+          <button
+            onClick={onStart}
+            disabled={connecting || localStream}
+            className="bg-indigo-500 text-white px-6 py-3 rounded-xl hover:bg-indigo-600 disabled:opacity-50 transform hover:scale-105 transition-all duration-200 shadow-lg"
+            aria-label="Start video chat"
+          >
+            Start Video Chat
+          </button>
+          <button
+            onClick={onEnd}
+            disabled={!localStream}
+            className="bg-red-500 text-white px-6 py-3 rounded-xl hover:bg-red-600 disabled:opacity-50 transform hover:scale-105 transition-all duration-200 shadow-lg"
+            aria-label="End video chat"
+          >
+            End Video Chat
+          </button>
+          <button
+            onClick={onToggleAudio}
+            className="bg-indigo-400 text-white px-4 py-3 rounded-xl hover:bg-indigo-500 transform hover:scale-105 transition-all duration-200 shadow-lg"
+            aria-label={audioEnabled ? "Mute audio" : "Unmute audio"}
+          >
+            {audioEnabled ? "Mute Audio" : "Unmute Audio"}
+          </button>
+          <button
+            onClick={onToggleVideo}
+            className="bg-indigo-400 text-white px-4 py-3 rounded-xl hover:bg-indigo-500 transform hover:scale-105 transition-all duration-200 shadow-lg"
+            aria-label={videoEnabled ? "Mute video" : "Unmute video"}
+          >
+            {videoEnabled ? "Mute Video" : "Unmute Video"}
+          </button>
+        </div>
+        <div className="flex items-center justify-center space-x-2">
+          {connecting && (
+            <div className="animate-spin h-6 w-6 border-4 border-t-indigo-500 border-indigo-300/50 rounded-full" aria-label="Loading"></div>
+          )}
+          <p className="text-white font-medium text-shadow">{status}</p>
+        </div>
+      </div>
+    );
+
+    // TextChat Component
+    const TextChat = ({ messages, onSendMessage, onTyping }) => {
+      const [message, setMessage] = useState("");
+      const chatBoxRef = useRef(null);
+
+      useEffect(() => {
+        if (chatBoxRef.current) {
+          chatBoxRef.current.scrollTop = chatBoxRef.current.scrollHeight;
+        }
+      }, [messages]);
+
+      const handleSend = () => {
+        if (message.trim()) {
+          onSendMessage(message);
+          setMessage("");
+        }
+      };
+
+      return (
+        <div className="w-full md:w-1/3 space-y-4">
+          <div
+            ref={chatBoxRef}
+            className="bg-white/80 backdrop-blur-sm p-4 rounded-2xl h-96 overflow-y-auto shadow-inner border border-indigo-300/50"
+            aria-live="polite"
+          >
+            {messages.map((msg, index) => (
+              <div
+                key={index}
+                className={`p-3 m-2 rounded-lg max-w-xs ${
+                  msg.sender === "You"
+                    ? "bg-gradient-to-r from-indigo-500 to-indigo-300 text-white ml-auto"
+                    : "bg-gradient-to-r from-indigo-200 to-white text-indigo-800 mr-auto"
+                } shadow-md hover:shadow-lg transition-all duration-200`}
+              >
+                <div className="flex justify-between items-baseline">
+                  <span className="font-bold">{msg.sender}</span>
+                  <span className="text-xs opacity-75">{msg.time}</span>
+                </div>
+                <div>{msg.text}</div>
+              </div>
+            ))}
+          </div>
+          <div className="flex">
+            <input
+              type="text"
+              value={message}
+              onChange={(e) => {
+                setMessage(e.target.value);
+                onTyping();
+              }}
+              onKeyPress={(e) => e.key === "Enter" && handleSend()}
+              className="flex-1 p-3 border border-indigo-300/50 rounded-l-xl bg-white/80 text-indigo-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              placeholder="Type a message..."
+              aria-label="Chat input"
+            />
+            <button
+              onClick={handleSend}
+              className="bg-indigo-500 text-white px-6 py-3 rounded-r-xl hover:bg-indigo-600 transform hover:scale-105 transition-all duration-200 shadow-lg"
+              aria-label="Send message"
+            >
+              Send
+            </button>
+          </div>
+        </div>
+      );
+    };
+
+    // Main App Component
+    const App = () => {
+      const [localStream, setLocalStream] = useState(null);
+      const [remoteStream, setRemoteStream] = useState(null);
+      const [peerConnection, setPeerConnection] = useState(null);
+      const [messages, setMessages] = useState([]);
+      const [status, setStatus] = useState("Click 'Start Video Chat' to connect...");
+      const [connecting, setConnecting] = useState(false);
+      const [audioEnabled, setAudioEnabled] = useState(true);
+      const [videoEnabled, setVideoEnabled] = useState(true);
+      const [isDarkMode, setIsDarkMode] = useState(
+        localStorage.getItem("theme") === "dark" ||
+          (!localStorage.getItem("theme") && window.matchMedia("(prefers-color-scheme: dark)").matches)
+      );
+      const [socketConnected, setSocketConnected] = useState(false);
+      const [showWelcome, setShowWelcome] = useState(localStorage.getItem("ageConfirmed") !== "true");
+      const socketRef = useRef(null);
+
+      // Handle age confirmation
+      const handleAgeConfirm = () => {
+        localStorage.setItem("ageConfirmed", "true");
+        setShowWelcome(false);
+      };
+
+      // WebRTC Configuration
+      const configuration = {
+        iceServers: [
+          { urls: "stun:stun.l.google.com:19302" },
+          { urls: "stun:stun1.l.google.com:19302" },
+        ],
+      };
+
+      // Check HTTPS
+      useEffect(() => {
+        if (window.location.protocol !== "https:" && window.location.hostname !== "localhost") {
+          setStatus("This app requires HTTPS for camera access. Please use a secure connection.");
+        }
+      }, []);
+
+      // Initialize Socket.IO
+      useEffect(() => {
+        if (!showWelcome) {
+          socketRef.current = io("http://localhost:3000", { reconnection: true });
+          const socket = socketRef.current;
+
+          socket.on("connect", () => {
+            setSocketConnected(true);
+            setStatus("Click 'Start Video Chat' to connect...");
+          });
+
+          socket.on("disconnect", () => {
+            setSocketConnected(false);
+            setStatus("Socket disconnected. Reconnecting...");
+            cleanup();
+          });
+
+          socket.on("offer", async (offer) => {
+            if (!peerConnection) {
+              await setupPeerConnection();
+            }
+            try {
+              setConnecting(true);
+              await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+              const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+              setLocalStream(stream);
+              stream.getTracks().forEach((track) => peerConnection.addTrack(track, stream));
+              const answer = await peerConnection.createAnswer();
+              await peerConnection.setLocalDescription(answer);
+              socket.emit("answer", answer);
+              setStatus("Connected to a stranger!");
+              setConnecting(false);
+            } catch (error) {
+              setStatus(`Error connecting: ${error.message}`);
+              setConnecting(false);
+              console.error("Offer error:", error);
+            }
+          });
+
+          socket.on("answer", async (answer) => {
+            await peerConnection?.setRemoteDescription(new RTCSessionDescription(answer)).catch((error) => {
+              console.error("Answer error:", error);
+            });
+          });
+
+          socket.on("ice-candidate", async (candidate) => {
+            try {
+              await peerConnection?.addIceCandidate(new RTCIceCandidate(candidate));
+            } catch (error) {
+              console.error("ICE candidate error:", error);
+            }
+          });
+
+          socket.on("end-chat", () => {
+            cleanup();
+            setStatus("Stranger disconnected. Click Start to connect again.");
+          });
+
+          socket.on("message", (message) => {
+            setMessages((prev) => [
+              ...prev,
+              { sender: "Stranger", text: message, time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) },
+            ]);
+          });
+
+          return () => socket.disconnect();
+        }
+      }, [showWelcome]);
+
+      // Setup PeerConnection
+      const setupPeerConnection = async () => {
+        const pc = new RTCPeerConnection(configuration);
+        setPeerConnection(pc);
+
+        pc.ontrack = (event) => {
+          setRemoteStream(event.streams[0]);
+          setStatus("Connected to a stranger!");
+          setConnecting(false);
+        };
+
+        pc.onicecandidate = (event) => {
+          if (event.candidate) {
+            socketRef.current.emit("ice-candidate", event.candidate);
+          }
+        };
+
+        pc.oniceconnectionstatechange = () => {
+          if (pc.iceConnectionState === "disconnected" || pc.iceConnectionState === "failed") {
+            cleanup();
+            setStatus("Connection lost. Click Start to reconnect.");
+          }
+        };
+
+        return pc;
+      };
+
+      // Start Video Chat
+      const startVideoChat = async () => {
+        if (!socketConnected) {
+          setStatus("Cannot start: Socket.IO server is not connected.");
+          return;
+        }
+
+        if (window.location.protocol !== "https:" && window.location.hostname !== "localhost") {
+          setStatus("Camera access requires HTTPS. Please use a secure connection.");
+          return;
+        }
+
+        try {
+          setConnecting(true);
+          setStatus("Requesting camera access...");
+          
+          const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+          setLocalStream(stream);
+
+          const pc = await setupPeerConnection();
+          stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+          
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+          socketRef.current.emit("offer", offer);
+        } catch (error) {
+          let errorMessage = "Failed to start video chat: ";
+          if (error.name === "NotAllowedError") {
+            errorMessage += "Camera and microphone access denied. Please grant permissions in your browser settings.";
+          } else if (error.name === "NotFoundError") {
+            errorMessage += "No camera or microphone found. Please ensure devices are connected.";
+          } else {
+            errorMessage += error.message || "Unknown error.";
+          }
+          setStatus(errorMessage);
+          setConnecting(false);
+          console.error("Start video error:", error);
+        }
+      };
+
+      // End Video Chat
+      const endVideoChat = () => {
+        socketRef.current.emit("end-chat");
+        cleanup();
+        setStatus("Disconnected. Click Start to connect again.");
+      };
+
+      // Cleanup
+      const cleanup = () => {
+        if (peerConnection) {
+          peerConnection.close();
+          setPeerConnection(null);
+        }
+        if (localStream) {
+          localStream.getTracks().forEach((track) => track.stop());
+          setLocalStream(null);
+        }
+        setRemoteStream(null);
+        setConnecting(false);
+        setAudioEnabled(true);
+        setVideoEnabled(true);
+      };
+
+      // Toggle Audio
+      const toggleAudio = () => {
+        if (localStream) {
+          const audioTrack = localStream.getAudioTracks()[0];
+          audioTrack.enabled = !audioTrack.enabled;
+          setAudioEnabled(audioTrack.enabled);
+        }
+      };
+
+      // Toggle Video
+      const toggleVideo = () => {
+        if (localStream) {
+          const videoTrack = localStream.getVideoTracks()[0];
+          videoTrack.enabled = !videoTrack.enabled;
+          setVideoEnabled(videoTrack.enabled);
+        }
+      };
+
+      // Send Message
+      const sendMessage = (message) => {
+        socketRef.current.emit("message", message);
+        setMessages((prev) => [
+          ...prev,
+          { sender: "You", text: message, time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) },
+        ]);
+      };
+
+      // Theme Toggle
+      const toggleTheme = () => {
+        setIsDarkMode(!isDarkMode);
+        localStorage.setItem("theme", !isDarkMode ? "dark" : "light");
+        document.documentElement.classList.toggle("dark");
+      };
+
+      return (
+        showWelcome ? (
+          <WelcomePage onConfirm={handleAgeConfirm} />
+        ) : (
+          <div className={`w-full max-w-6xl mx-4 bg-white/90 dark:bg-gray-800/90 backdrop-blur-md p-8 rounded-3xl shadow-2xl border border-indigo-300/50 transition-all duration-500 ${isDarkMode ? "text-white" : "text-gray-900"}`}>
+            <div className="flex justify-between items-center mb-6">
+              <h1 className="text-5xl font-bold text-white dark:text-indigo-300 text-shadow">My Stranger</h1>
+              <button
+                onClick={toggleTheme}
+                className="p-2 rounded-full bg-indigo-500/50 text-white hover:bg-indigo-600/50 transition-all duration-200 shadow-lg"
+                aria-label="Toggle theme"
+              >
+                <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                  <path
+                    d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z"
+                    fillRule="evenodd"
+                    clipRule="evenodd"
+                  />
+                </svg>
+              </button>
+            </div>
+            <div className="flex flex-col md:flex-row gap-8">
+              <VideoChat
+                localStream={localStream}
+                remoteStream={remoteStream}
+                onStart={startVideoChat}
+                onEnd={endVideoChat}
+                onToggleAudio={toggleAudio}
+                onToggleVideo={toggleVideo}
+                audioEnabled={audioEnabled}
+                videoEnabled={videoEnabled}
+                status={status}
+                connecting={connecting}
+              />
+              <TextChat
+                messages={messages}
+                onSendMessage={sendMessage}
+                onTyping={() => {} /* Add typing indicator logic if needed */}
+              />
+            </div>
+          </div>
+        )
+      );
+    };
+
+    // Render App
+    ReactDOM.render(<App />, document.getElementById("root"));
+  </script>
+</body>
+</html>
